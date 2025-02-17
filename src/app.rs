@@ -1,62 +1,120 @@
+use std::time::Instant;
+
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use rand::seq::IndexedRandom;
+use ratatui::style::Stylize;
 use ratatui::{
-    style::Stylize,
+    layout::{Alignment, Constraint, Direction, Layout},
+    style::{Color, Modifier, Style},
     text::Line,
     widgets::{Block, Paragraph},
     DefaultTerminal, Frame,
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct App {
-    /// Is the application running?
     running: bool,
+    words: Vec<String>,
+    input: String,
+    start_time: Option<Instant>,
+    wpm_data: Vec<u32>,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self {
+            running: false,
+            words: Self::generate_text(),
+            input: String::new(),
+            start_time: None,
+            wpm_data: Vec::new(),
+        }
+    }
 }
 
 impl App {
-    /// Construct a new instance of [`App`].
+    fn generate_text() -> Vec<String> {
+        let word_list = [
+            "hello",
+            "world",
+            "rust",
+            "speed",
+            "test",
+            "keyboard",
+            "fast",
+            "typing",
+            "game",
+            "challenge",
+            "performance",
+            "accuracy",
+        ];
+        let mut rng = rand::rng();
+        word_list
+            .choose_multiple(&mut rng, 10)
+            .map(|s| s.to_string())
+            .collect()
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Run the application's main loop.
     pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
         self.running = true;
         while self.running {
             terminal.draw(|frame| self.draw(frame))?;
             self.handle_crossterm_events()?;
+            self.update_wpm();
         }
         Ok(())
     }
 
-    /// Renders the user interface.
-    ///
-    /// This is where you add new widgets. See the following resources for more information:
-    /// - <https://docs.rs/ratatui/latest/ratatui/widgets/index.html>
-    /// - <https://github.com/ratatui/ratatui/tree/master/examples>
     fn draw(&mut self, frame: &mut Frame) {
-        let title = Line::from("Ratatui Simple Template")
-            .bold()
-            .blue()
-            .centered();
-        let text = "Hello, Ratatui!\n\n\
-            Created using https://github.com/ratatui/templates\n\
-            Press `Esc`, `Ctrl-C` or `q` to stop running.";
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(20),
+                Constraint::Percentage(50),
+                Constraint::Percentage(30),
+            ])
+            .split(frame.area());
+
+        let title = Line::from("Typing Speed Test").bold().blue().centered();
+
+        let text_display = self.words.join(" ");
+        let input_display = format!("Your Input: {}", self.input);
+        let wpm_display = format!("WPM: {}", self.wpm_data.last().unwrap_or(&0));
+
+        let text_paragraph = Paragraph::new(text_display)
+            .block(Block::bordered().title("Words to Type"))
+            .alignment(Alignment::Center);
+
+        let input_paragraph = Paragraph::new(input_display)
+            .block(Block::bordered().title("Your Typing"))
+            .alignment(Alignment::Right)
+            .style(Style::default().fg(Color::Green));
+
+        let wpm_paragraph = Paragraph::new(wpm_display)
+            .block(Block::bordered().title("Speed (WPM)"))
+            .alignment(Alignment::Left)
+            .style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            );
+
         frame.render_widget(
-            Paragraph::new(text)
-                .block(Block::bordered().title(title))
-                .centered(),
-            frame.area(),
-        )
+            Paragraph::new("").block(Block::bordered().title(title)),
+            layout[0],
+        );
+        frame.render_widget(text_paragraph, layout[1]);
+        frame.render_widget(input_paragraph, layout[2]);
+        frame.render_widget(wpm_paragraph, layout[2]);
     }
 
-    /// Reads the crossterm events and updates the state of [`App`].
-    ///
-    /// If your application needs to perform work in between handling events, you can use the
-    /// [`event::poll`] function to check if there are any events available with a timeout.
     fn handle_crossterm_events(&mut self) -> Result<()> {
         match event::read()? {
-            // it's important to check KeyEventKind::Press to avoid handling key release events
             Event::Key(key) if key.kind == KeyEventKind::Press => self.on_key_event(key),
             Event::Mouse(_) => {}
             Event::Resize(_, _) => {}
@@ -65,17 +123,38 @@ impl App {
         Ok(())
     }
 
-    /// Handles the key events and updates the state of [`App`].
     fn on_key_event(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
-            (_, KeyCode::Esc | KeyCode::Char('q'))
+            (_, KeyCode::Esc)
             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.quit(),
-            // Add other key handlers here.
+            (KeyModifiers::NONE, KeyCode::Char(c)) => {
+                if self.start_time.is_none() {
+                    self.start_time = Some(Instant::now());
+                }
+                self.input.push(c);
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('r')) => self.reset(),
             _ => {}
         }
     }
 
-    /// Set running to false to quit the application.
+    fn update_wpm(&mut self) {
+        if let Some(start) = self.start_time {
+            let elapsed = start.elapsed().as_secs();
+            if elapsed > 0 {
+                let wpm = (self.input.len() as f64 / 5.0) * (60.0 / elapsed as f64);
+                self.wpm_data.push(wpm as u32);
+            }
+        }
+    }
+
+    fn reset(&mut self) {
+        self.words = Self::generate_text();
+        self.input.clear();
+        self.start_time = None;
+        self.wpm_data.clear();
+    }
+
     fn quit(&mut self) {
         self.running = false;
     }
