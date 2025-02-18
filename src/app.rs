@@ -3,9 +3,10 @@ use std::time::Instant;
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use rand::seq::IndexedRandom;
+use ratatui::layout::Constraint;
 use ratatui::style::Stylize;
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Alignment, Direction, Layout},
     style::{Color, Modifier, Style},
     text::Line,
     widgets::{Block, Paragraph},
@@ -73,27 +74,39 @@ impl App {
     fn draw(&mut self, frame: &mut Frame) {
         let layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Percentage(20),
-                Constraint::Percentage(50),
-                Constraint::Percentage(30),
-            ])
+            .constraints([Constraint::Percentage(100)])
+            .margin(3)
             .split(frame.area());
 
-        let title = Line::from("Typing Speed Test").bold().blue().centered();
+        let title = Line::from("Teaty Typing Speed Test")
+            .bold()
+            .blue()
+            .centered();
 
-        let text_display = self.words.join(" ");
-        let input_display = format!("Your Input: {}", self.input);
+        let mut text_display = String::new();
+        for (i, word) in self.words.iter().enumerate() {
+            if i > 0 {
+                text_display.push(' ');
+            }
+            for (j, c) in word.chars().enumerate() {
+                if let Some(input_char) = self.input.chars().nth(i * (word.len() + 1) + j) {
+                    if input_char == c {
+                        text_display.push_str(&c.to_string().green().to_string());
+                    } else {
+                        text_display.push_str(&c.to_string().red().to_string());
+                    }
+                } else {
+                    text_display.push(c);
+                }
+            }
+        }
+
         let wpm_display = format!("WPM: {}", self.wpm_data.last().unwrap_or(&0));
 
         let text_paragraph = Paragraph::new(text_display)
             .block(Block::bordered().title("Words to Type"))
-            .alignment(Alignment::Center);
-
-        let input_paragraph = Paragraph::new(input_display)
-            .block(Block::bordered().title("Your Typing"))
-            .alignment(Alignment::Right)
-            .style(Style::default().fg(Color::Green));
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::LightGreen));
 
         let wpm_paragraph = Paragraph::new(wpm_display)
             .block(Block::bordered().title("Speed (WPM)"))
@@ -108,9 +121,8 @@ impl App {
             Paragraph::new("").block(Block::bordered().title(title)),
             layout[0],
         );
-        frame.render_widget(text_paragraph, layout[1]);
-        frame.render_widget(input_paragraph, layout[2]);
-        frame.render_widget(wpm_paragraph, layout[2]);
+        frame.render_widget(text_paragraph, layout[0]);
+        frame.render_widget(wpm_paragraph, layout[0]);
     }
 
     fn handle_crossterm_events(&mut self) -> Result<()> {
@@ -122,7 +134,7 @@ impl App {
         }
         Ok(())
     }
-    
+
     // All keystrokes along with the exit logic implemented
     fn on_key_event(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
@@ -143,12 +155,11 @@ impl App {
         if let Some(start) = self.start_time {
             let elapsed = start.elapsed().as_secs();
             if elapsed > 0 {
-                
                 // Calculate words per minute (WPM)
                 // WPM is calculated as the number of characters typed divided by 5 (average word length)
                 // multiplied by 60 (seconds in a minute) divided by the elapsed time in seconds
                 let wpm = (self.input.len() as f64 / 5.0) * (60.0 / elapsed as f64);
-                
+
                 // Store the calculated WPM in the wpm_data vector
                 self.wpm_data.push(wpm as u32);
             }
