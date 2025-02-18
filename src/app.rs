@@ -122,7 +122,8 @@ impl App {
         }
         Ok(())
     }
-
+    
+    // All keystrokes along with the exit logic implemented
     fn on_key_event(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
             (_, KeyCode::Esc)
@@ -142,7 +143,13 @@ impl App {
         if let Some(start) = self.start_time {
             let elapsed = start.elapsed().as_secs();
             if elapsed > 0 {
+                
+                // Calculate words per minute (WPM)
+                // WPM is calculated as the number of characters typed divided by 5 (average word length)
+                // multiplied by 60 (seconds in a minute) divided by the elapsed time in seconds
                 let wpm = (self.input.len() as f64 / 5.0) * (60.0 / elapsed as f64);
+                
+                // Store the calculated WPM in the wpm_data vector
                 self.wpm_data.push(wpm as u32);
             }
         }
